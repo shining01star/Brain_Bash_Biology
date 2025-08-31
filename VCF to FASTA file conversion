@@ -1,0 +1,49 @@
+#!/bin/bash
+set -euo pipefail
+
+# ========== INPUT ==========
+VCF_DIR="your/VCF/directory/path"          # Directory with your VCF.gz files
+REF_FA="put your reference directory path"   # Reference FASTA
+BED_FILE="path of your bed file"     # BED file with desired gene region(s)
+OUT_DIR="path for your output directory"          # Output directory
+
+# ========== TOOLS ==========
+BCFTOOLS="bcftools"
+BEDTOOLS="bedtools"
+
+# ========== CREATE OUTPUT ==========
+mkdir -p "${OUT_DIR}/folder_name"
+mkdir -p "${OUT_DIR}/folder_name"
+
+# ========== STEP 1: Index reference ==========
+if [ ! -f "${REF_FA}.fai" ]; then 
+    echo "Indexing reference genome..."
+    samtools faidx "$REF_FA"
+fi
+
+# ========== STEP 2: Process each VCF ==========
+for vcf in ${VCF_DIR}/*.rebgz.vcf.gz; do
+    sample=$(basename "$vcf" .vcf.gz)
+    echo ">>> Processing $sample"
+
+    # Step 2a: Index the VCF if not already indexed
+    if [ ! -f "${vcf}.csi" ] && [ ! -f "${vcf}.tbi" ]; then
+        echo "Indexing $vcf ..."
+        $BCFTOOLS index "$vcf"
+    fi
+
+    # Step 2b: Build consensus FASTA
+    consensus_fa="${OUT_DIR}/consensus_all/${sample}_consensus.fa"
+    echo "Building consensus for $sample ..."
+    $BCFTOOLS consensus -f "$REF_FA" "$vcf" -o "$consensus_fa"
+
+    # Step 2c: Extract desired gene region(s) with BED
+    elf6_fa="${OUT_DIR}/desired_gene_seqs/${sample}_desired_gene.fa"
+    echo "Extracting desired_gene region for $sample ..."
+    $BEDTOOLS getfasta -fi "$consensus_fa" -bed "$BED_FILE" -fo "$desired_gene_fa"
+done
+
+# ========== STEP 3: Combine desired_gene sequences ==========
+cat ${OUT_DIR}/desired_gene_seqs/*_desired_gene.fa > "${OUT_DIR}/desired_gene_all_samples.fa"
+
+echo "✅ Pipeline complete!"
